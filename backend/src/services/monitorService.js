@@ -9,7 +9,11 @@ const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 5000);
 
 async function fetchHealth(baseUrl) {
   try {
-    const res = await axios.get(`${baseUrl}/health`, { timeout: 3000 });
+    const res = await axios.get(`${baseUrl}/health`, { 
+      timeout: 3000,
+      // CRITICAL FIX: Bypass Ngrok warning page
+      headers: { "ngrok-skip-browser-warning": "true" }
+    });
     return { reachable: true, health: res.data, error: null };
   } catch (err) {
     return { reachable: false, health: null, error: err.message };
@@ -76,7 +80,7 @@ async function pollOnce() {
 
   log(`Cycle Complete. Chosen: ${decision.chosenServer}. Next poll in ${POLL_INTERVAL_MS}ms.`);
 
-  // 6. Schedule NEXT poll only after this one finishes (Fixes the pile-up bug)
+  // 6. Schedule NEXT poll only after this one finishes
   setTimeout(pollOnce, POLL_INTERVAL_MS);
 }
 

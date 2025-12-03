@@ -454,7 +454,7 @@ function ControlCenter({ targetServer, setTargetServer, onSingleReq, onFloodReq,
   const [errorRate, setErrorRate] = useState(0);
   const [failures, setFailures] = useState({ db: false, nullPtr: false, timeout: false });
 
-  const baseUrl = targetServer === 'A' ? 'http://localhost:8080' : 'http://localhost:8081';
+  const baseUrl = targetServer === 'A' ? 'http://localhost:8080' : 'https://bogus-tendrilous-gil.ngrok-free.dev';
 
   const sendCommand = async (endpoint, params = {}) => {
     try { await axios.get(`${baseUrl}/control/${endpoint}`, { params }); } 
@@ -595,14 +595,14 @@ function App() {
   // Traffic Handlers
   const handleSingleReq = async () => {
     setCaptureAi(true); // ENABLE logging for single traces
-    const baseUrl = controlTarget === 'A' ? 'http://localhost:8080' : 'http://localhost:8081';
+    const baseUrl = controlTarget === 'A' ? 'http://localhost:8080' : 'https://bogus-tendrilous-gil.ngrok-free.dev';
     await axios.get(`${baseUrl}/api/resource`).catch(()=>{});
   };
 
   const handleFloodReq = async () => {
     setCaptureAi(false); // DISABLE logging to prevent flooding the UI
     setLoading(true);
-    const baseUrl = controlTarget === 'A' ? 'http://localhost:8080' : 'http://localhost:8081';
+    const baseUrl = controlTarget === 'A' ? 'http://localhost:8080' : 'https://bogus-tendrilous-gil.ngrok-free.dev';
     for(let i=0; i<50; i++) {
         axios.get(`${baseUrl}/api/resource`).catch(() => {});
         await new Promise(r => setTimeout(r, 10)); // Fast interval
