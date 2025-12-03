@@ -5,7 +5,7 @@ import {
   Activity, Server, Cpu, Zap, Shield, ShieldAlert, Terminal, 
   AlertTriangle, WifiOff, Settings, ZapOff, Database, 
   Clock, AlertOctagon, RefreshCw, Play, BrainCircuit, LayoutDashboard, 
-  Globe, AlertCircle, CheckCircle
+  Globe, AlertCircle, CheckCircle, FastForward, MessageSquare
 } from "lucide-react";
 
 // --- STYLES ---
@@ -15,7 +15,7 @@ const styles = `
   :root {
     --bg-dark: #050b14;
     --bg-panel: #0d121f; 
-    --bg-panel-trans: rgba(13, 18, 31, 0.85);
+    --bg-panel-trans: rgba(13, 18, 31, 0.9);
     --primary: #00f2ff;
     --secondary: #7000ff;
     --success: #00ff9d;
@@ -126,13 +126,15 @@ const styles = `
     min-height: 0;
   }
 
-  /* Brain View Grid */
-  .brain-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+  /* Brain View Grid - Single Column List */
+  .brain-container {
     flex-grow: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    padding-right: 5px;
   }
 
   /* Server Stack (Left Column) */
@@ -211,20 +213,40 @@ const styles = `
   .log-server { color: var(--primary); font-weight: bold; width: 60px; flex-shrink: 0; }
   .log-msg { color: var(--text-main); }
 
-  /* Brain View Code Blocks */
+  /* Brain View Logs - UPDATED */
+  .brain-log-card {
+    background: var(--bg-panel-trans);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    display: grid;
+    /* Fixed 50/50 split, using minmax(0, 1fr) to prevent content blowout */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+  
+  .brain-section-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.8rem; font-weight: bold; text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 0.5rem;
+  }
+
   .code-block {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    background: rgba(0,0,0,0.3);
+    font-size: 0.85rem; 
+    color: #e0e6ed; 
+    background: #050b14; 
     padding: 1rem;
-    border-radius: 8px;
+    border-radius: 6px;
     overflow: auto;
-    flex-grow: 1;
-    border: 1px solid rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
     white-space: pre-wrap;
+    max-height: 500px;
   }
-  .code-highlight { color: var(--secondary); font-weight: bold; }
+  .code-highlight { color: #00f2ff; font-weight: normal; } 
 
   /* Control Center */
   .control-center { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; height: 160px; flex-shrink: 0; padding: 1rem; margin-top: auto; }
@@ -234,9 +256,12 @@ const styles = `
   .control-btn:hover { border-color: var(--text-main); color: var(--text-main); background: rgba(255,255,255,0.05); }
   .control-btn.active { border-color: var(--danger); background: rgba(255,0,85,0.1); color: var(--danger); box-shadow: 0 0 10px rgba(255,0,85,0.1); }
   input[type=range] { width: 100%; accent-color: var(--primary); height: 4px; }
-  .traffic-btn { background: var(--primary); color: #000; font-weight: bold; border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-family: 'JetBrains Mono'; font-size: 0.85rem; margin-top: 0.2rem; transition: transform 0.1s; width: 100%; }
+  
+  .traffic-btn { background: var(--primary); color: #000; font-weight: bold; border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-family: 'JetBrains Mono'; font-size: 0.85rem; transition: transform 0.1s; }
   .traffic-btn:hover { box-shadow: 0 0 15px rgba(0, 242, 255, 0.4); }
   .traffic-btn:active { transform: scale(0.98); }
+  .traffic-btn.flood { background: var(--secondary); color: #fff; }
+  .traffic-btn.flood:hover { box-shadow: 0 0 15px rgba(112, 0, 255, 0.4); }
 `;
 
 // --- MOCK DATA ---
@@ -281,16 +306,6 @@ function ServerCard({ name, data, isSelected }) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function StatCard({ label, value, icon: Icon, color }) {
-  return (
-    <div className="glass-panel info-card" style={{borderColor: color ? color : 'rgba(255,255,255,0.1)'}}>
-       <Icon size={28} color={color || 'var(--primary)'} />
-       <div className="info-val" style={{color: color || 'var(--text-main)'}}>{value}</div>
-       <div className="info-label">{label}</div>
     </div>
   );
 }
@@ -387,71 +402,69 @@ function HistoryLog({ history }) {
   );
 }
 
-function BrainView({ decision }) {
-  if (!decision) return <div className="glass-panel" style={{alignItems:'center', justifyContent:'center'}}>Waiting for AI Telemetry...</div>;
+function BrainView({ aiLog }) {
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [aiLog]);
 
   return (
-    <div className="brain-grid">
-      {/* Input / Prompt */}
-      <div className="glass-panel">
-        <div style={{display:'flex', alignItems:'center', gap: 10, marginBottom: 10, color: 'var(--primary)'}}>
-          <Terminal size={18} />
-          <span style={{fontWeight: 'bold'}}>INPUT: LLM PROMPT CONSTRUCTION</span>
+    <div className="brain-container">
+      {aiLog.length === 0 && (
+        <div style={{textAlign:'center', color:'var(--text-muted)', marginTop:'2rem'}}>
+          No AI traces captured yet. Use "Single Request" to record AI thinking process.
         </div>
-        <div className="code-block">
-          {decision.promptUsed || "Checking backend for prompt exposure..."}
-        </div>
-      </div>
+      )}
 
-      {/* Output / Reasoning */}
-      <div className="glass-panel">
-        <div style={{display:'flex', alignItems:'center', gap: 10, marginBottom: 10, color: 'var(--secondary)'}}>
-          <BrainCircuit size={18} />
-          <span style={{fontWeight: 'bold'}}>OUTPUT: MODEL REASONING</span>
-        </div>
-        <div className="code-block">
-          {decision.rawResponse ? (
-             <>
-               <span style={{color: 'var(--text-muted)'}}>{`// Received from Mistral/Ollama`}</span>
-               <br/>
-               <span className="code-highlight">{decision.rawResponse}</span>
-             </>
-          ) : "Waiting for model response..."}
-        </div>
-      </div>
+      {aiLog.map((entry, idx) => (
+        <motion.div 
+          key={idx} 
+          className="brain-log-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          {/* Input Side */}
+          <div>
+            <div className="brain-section-title" style={{color: 'var(--primary)'}}>
+              <Terminal size={14} /> INPUT: LLM PROMPT
+            </div>
+            <div className="code-block">{entry.prompt}</div>
+          </div>
+
+          {/* Output Side */}
+          <div>
+            <div className="brain-section-title" style={{color: 'var(--secondary)'}}>
+              <BrainCircuit size={14} /> OUTPUT: MODEL REASONING
+            </div>
+            <div className="code-block">
+              <span className="code-highlight">{entry.response}</span>
+            </div>
+          </div>
+          
+          <div style={{gridColumn: '1 / -1', fontSize:'0.7rem', color:'var(--text-muted)', textAlign:'right', borderTop:'1px solid rgba(255,255,255,0.05)', paddingTop:'0.5rem'}}>
+            TIMESTAMP: {new Date(entry.timestamp).toLocaleTimeString()}
+          </div>
+        </motion.div>
+      ))}
+      <div ref={bottomRef} />
     </div>
   );
 }
 
-function ControlCenter({ targetServer, setTargetServer }) {
+function ControlCenter({ targetServer, setTargetServer, onSingleReq, onFloodReq, loading }) {
   const [latency, setLatency] = useState(0);
   const [errorRate, setErrorRate] = useState(0);
   const [failures, setFailures] = useState({ db: false, nullPtr: false, timeout: false });
-  const [loading, setLoading] = useState(false);
 
   const baseUrl = targetServer === 'A' ? 'http://localhost:8080' : 'http://localhost:8081';
 
   const sendCommand = async (endpoint, params = {}) => {
-    try {
-      await axios.get(`${baseUrl}/control/${endpoint}`, { params });
-    } catch (err) {
-      console.error(`Cmd failed: ${endpoint}`, err);
-    }
+    try { await axios.get(`${baseUrl}/control/${endpoint}`, { params }); } 
+    catch (err) { console.error(`Cmd failed: ${endpoint}`, err); }
   };
 
   const handleToggle = (key, endpoint) => {
     const newVal = !failures[key];
     setFailures(prev => ({ ...prev, [key]: newVal }));
     sendCommand(endpoint, { enabled: newVal });
-  };
-
-  const handleTrafficSpike = async () => {
-    setLoading(true);
-    for(let i=0; i<50; i++) {
-        axios.get(`${baseUrl}/api/resource`).catch(() => {});
-        await new Promise(r => setTimeout(r, 50));
-    }
-    setTimeout(() => setLoading(false), 500);
   };
 
   const resetAll = () => {
@@ -505,15 +518,18 @@ function ControlCenter({ targetServer, setTargetServer }) {
       </div>
 
       <div className="control-col">
-        <div className="control-title"><Activity size={14} /> STRESS TEST</div>
-        <div style={{flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center'}}>
-          <button className="traffic-btn" onClick={handleTrafficSpike} disabled={loading}>
-              {loading ? <RefreshCw className="spin" size={16}/> : <Play size={16} />}
-              {loading ? 'SENDING...' : 'SEND 50 REQ'}
+        <div className="control-title"><Activity size={14} /> REQUEST GENERATOR</div>
+        <div style={{flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'center'}}>
+          {/* Single Request Button */}
+          <button className="traffic-btn" onClick={onSingleReq} disabled={loading}>
+              <Play size={14} /> SEND 1 REQUEST (TRACE)
           </button>
-          <div style={{fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.5rem', lineHeight: '1.2'}}>
-              Triggers high load logic
-          </div>
+          
+          {/* Flood Button */}
+          <button className="traffic-btn flood" onClick={onFloodReq} disabled={loading}>
+              {loading ? <RefreshCw className="spin" size={14}/> : <FastForward size={14} />} 
+              {loading ? 'FLOODING...' : 'FLOOD 50 REQUESTS'}
+          </button>
         </div>
       </div>
     </div>
@@ -525,10 +541,14 @@ function ControlCenter({ targetServer, setTargetServer }) {
 function App() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
+  const [aiLog, setAiLog] = useState([]); // Stores the AI thinking history
   const [useMock, setUseMock] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const [controlTarget, setControlTarget] = useState('A'); 
+  const [captureAi, setCaptureAi] = useState(true); // Default enabled
+  const [loading, setLoading] = useState(false);
 
+  // Poll Data
   useEffect(() => {
     const fetchData = async () => {
       if (useMock) {
@@ -540,25 +560,57 @@ function App() {
 
       try {
         const res = await axios.get("http://localhost:5000/metrics", { timeout: 2000 });
-        setData(res.data);
-        if (res.data.history) {
-           setHistory(res.data.history);
+        const freshData = res.data;
+        setData(freshData);
+        if (freshData.history) setHistory(freshData.history);
+
+        // INTELLIGENT AI LOGGING:
+        // Only capture if captureAi is enabled AND the decision timestamp is new
+        if (captureAi && freshData.lastDecision) {
+           setAiLog(prev => {
+              const lastEntry = prev[prev.length - 1];
+              // Avoid duplicates by checking if timestamp matches last entry
+              if (lastEntry?.timestamp !== freshData.lastDecision.timestamp) {
+                 return [...prev, {
+                    timestamp: freshData.lastDecision.timestamp,
+                    prompt: freshData.lastDecision.promptUsed,
+                    response: freshData.lastDecision.rawResponse
+                 }];
+              }
+              return prev;
+           });
         }
+
       } catch (err) {
-        console.error("Fetch error:", err.message);
+        // console.error("Fetch error");
         setData(null); 
       }
     };
 
     const interval = setInterval(fetchData, 2000);
     fetchData(); 
-
     return () => clearInterval(interval);
-  }, [useMock]);
+  }, [useMock, captureAi]);
 
-  // Derived Stats for Summary Cards
-  const totalErrors = (data?.serverA?.health?.metrics?.recentErrors || 0) + (data?.serverB?.health?.metrics?.recentErrors || 0);
-  const aiStatus = data?.lastDecision ? "ACTIVE" : "IDLE";
+  // Traffic Handlers
+  const handleSingleReq = async () => {
+    setCaptureAi(true); // ENABLE logging for single traces
+    const baseUrl = controlTarget === 'A' ? 'http://localhost:8080' : 'http://localhost:8081';
+    await axios.get(`${baseUrl}/api/resource`).catch(()=>{});
+  };
+
+  const handleFloodReq = async () => {
+    setCaptureAi(false); // DISABLE logging to prevent flooding the UI
+    setLoading(true);
+    const baseUrl = controlTarget === 'A' ? 'http://localhost:8080' : 'http://localhost:8081';
+    for(let i=0; i<50; i++) {
+        axios.get(`${baseUrl}/api/resource`).catch(() => {});
+        await new Promise(r => setTimeout(r, 10)); // Fast interval
+    }
+    setLoading(false);
+    // Optional: Re-enable capture after flood, or keep off until single req
+    setTimeout(() => setCaptureAi(true), 2000); 
+  };
 
   return (
     <>
@@ -625,11 +677,17 @@ function App() {
 
           </div>
         ) : (
-          <BrainView decision={data?.lastDecision} />
+          <BrainView aiLog={aiLog} />
         )}
 
         {/* Bottom: Control Center */}
-        <ControlCenter targetServer={controlTarget} setTargetServer={setControlTarget} />
+        <ControlCenter 
+          targetServer={controlTarget} 
+          setTargetServer={setControlTarget} 
+          onSingleReq={handleSingleReq}
+          onFloodReq={handleFloodReq}
+          loading={loading}
+        />
 
       </div>
     </>
